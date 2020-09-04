@@ -1,6 +1,27 @@
 export default /* glsl */`
 #ifdef USE_SHADOWMAP
 
+	#define NUM_SAMPLES 9
+	#define NUM_RINGS 6
+
+	vec2 poissonDisk[NUM_SAMPLES];
+
+	void initPoissonSamples( const in vec2 randomSeed ) {
+		float ANGLE_STEP = PI2 * float( NUM_RINGS ) / float( NUM_SAMPLES );
+		float INV_NUM_SAMPLES = 1.0 / float( NUM_SAMPLES );
+
+		// jsfiddle that shows sample pattern: https://jsfiddle.net/a16ff1p7/
+		float angle = 0.0;//rand( randomSeed ) * PI2;
+		float radius = INV_NUM_SAMPLES;
+		float radiusStep = radius;
+
+		for( int i = 0; i < NUM_SAMPLES; i ++ ) {
+			poissonDisk[i] = vec2( cos( angle ), sin( angle ) ) * pow( radius, 0.75 );
+			radius += radiusStep;
+			angle += ANGLE_STEP;
+		}
+	}
+
 	#if NUM_DIR_LIGHT_SHADOWS > 0
 
 		uniform sampler2D directionalShadowMap[ NUM_DIR_LIGHT_SHADOWS ];
@@ -83,37 +104,48 @@ export default /* glsl */`
 		if ( frustumTest ) {
 
 		#if defined( SHADOWMAP_TYPE_PCF )
+			initPoissonSamples( shadowCoord.xy );
 
+			float sum = 0.0;
 			vec2 texelSize = vec2( 1.0 ) / shadowMapSize;
+			for( int i = 0; i < NUM_SAMPLES; i ++ ) {
+				sum += texture2DCompare( shadowMap, shadowCoord.xy + poissonDisk[ i ] * texelSize.x * shadowRadius, shadowCoord.z );
+			}
+			for( int i = 0; i < NUM_SAMPLES; i ++ ) {
+				sum += texture2DCompare( shadowMap, shadowCoord.xy + -poissonDisk[ i ].yx * texelSize.x * shadowRadius, shadowCoord.z );
+			}
+			shadow = sum / ( 2.0 * float( NUM_SAMPLES ) );
 
-			float dx0 = - texelSize.x * shadowRadius;
-			float dy0 = - texelSize.y * shadowRadius;
-			float dx1 = + texelSize.x * shadowRadius;
-			float dy1 = + texelSize.y * shadowRadius;
-			float dx2 = dx0 / 2.0;
-			float dy2 = dy0 / 2.0;
-			float dx3 = dx1 / 2.0;
-			float dy3 = dy1 / 2.0;
+			// vec2 texelSize = vec2( 1.0 ) / shadowMapSize;
 
-			shadow = (
-				texture2DCompare( shadowMap, shadowCoord.xy + vec2( dx0, dy0 ), shadowCoord.z ) +
-				texture2DCompare( shadowMap, shadowCoord.xy + vec2( 0.0, dy0 ), shadowCoord.z ) +
-				texture2DCompare( shadowMap, shadowCoord.xy + vec2( dx1, dy0 ), shadowCoord.z ) +
-				texture2DCompare( shadowMap, shadowCoord.xy + vec2( dx2, dy2 ), shadowCoord.z ) +
-				texture2DCompare( shadowMap, shadowCoord.xy + vec2( 0.0, dy2 ), shadowCoord.z ) +
-				texture2DCompare( shadowMap, shadowCoord.xy + vec2( dx3, dy2 ), shadowCoord.z ) +
-				texture2DCompare( shadowMap, shadowCoord.xy + vec2( dx0, 0.0 ), shadowCoord.z ) +
-				texture2DCompare( shadowMap, shadowCoord.xy + vec2( dx2, 0.0 ), shadowCoord.z ) +
-				texture2DCompare( shadowMap, shadowCoord.xy, shadowCoord.z ) +
-				texture2DCompare( shadowMap, shadowCoord.xy + vec2( dx3, 0.0 ), shadowCoord.z ) +
-				texture2DCompare( shadowMap, shadowCoord.xy + vec2( dx1, 0.0 ), shadowCoord.z ) +
-				texture2DCompare( shadowMap, shadowCoord.xy + vec2( dx2, dy3 ), shadowCoord.z ) +
-				texture2DCompare( shadowMap, shadowCoord.xy + vec2( 0.0, dy3 ), shadowCoord.z ) +
-				texture2DCompare( shadowMap, shadowCoord.xy + vec2( dx3, dy3 ), shadowCoord.z ) +
-				texture2DCompare( shadowMap, shadowCoord.xy + vec2( dx0, dy1 ), shadowCoord.z ) +
-				texture2DCompare( shadowMap, shadowCoord.xy + vec2( 0.0, dy1 ), shadowCoord.z ) +
-				texture2DCompare( shadowMap, shadowCoord.xy + vec2( dx1, dy1 ), shadowCoord.z )
-			) * ( 1.0 / 17.0 );
+			// float dx0 = - texelSize.x * shadowRadius;
+			// float dy0 = - texelSize.y * shadowRadius;
+			// float dx1 = + texelSize.x * shadowRadius;
+			// float dy1 = + texelSize.y * shadowRadius;
+			// float dx2 = dx0 / 2.0;
+			// float dy2 = dy0 / 2.0;
+			// float dx3 = dx1 / 2.0;
+			// float dy3 = dy1 / 2.0;
+
+			// shadow = (
+			// 	texture2DCompare( shadowMap, shadowCoord.xy + vec2( dx0, dy0 ), shadowCoord.z ) +
+			// 	texture2DCompare( shadowMap, shadowCoord.xy + vec2( 0.0, dy0 ), shadowCoord.z ) +
+			// 	texture2DCompare( shadowMap, shadowCoord.xy + vec2( dx1, dy0 ), shadowCoord.z ) +
+			// 	texture2DCompare( shadowMap, shadowCoord.xy + vec2( dx2, dy2 ), shadowCoord.z ) +
+			// 	texture2DCompare( shadowMap, shadowCoord.xy + vec2( 0.0, dy2 ), shadowCoord.z ) +
+			// 	texture2DCompare( shadowMap, shadowCoord.xy + vec2( dx3, dy2 ), shadowCoord.z ) +
+			// 	texture2DCompare( shadowMap, shadowCoord.xy + vec2( dx0, 0.0 ), shadowCoord.z ) +
+			// 	texture2DCompare( shadowMap, shadowCoord.xy + vec2( dx2, 0.0 ), shadowCoord.z ) +
+			// 	texture2DCompare( shadowMap, shadowCoord.xy, shadowCoord.z ) +
+			// 	texture2DCompare( shadowMap, shadowCoord.xy + vec2( dx3, 0.0 ), shadowCoord.z ) +
+			// 	texture2DCompare( shadowMap, shadowCoord.xy + vec2( dx1, 0.0 ), shadowCoord.z ) +
+			// 	texture2DCompare( shadowMap, shadowCoord.xy + vec2( dx2, dy3 ), shadowCoord.z ) +
+			// 	texture2DCompare( shadowMap, shadowCoord.xy + vec2( 0.0, dy3 ), shadowCoord.z ) +
+			// 	texture2DCompare( shadowMap, shadowCoord.xy + vec2( dx3, dy3 ), shadowCoord.z ) +
+			// 	texture2DCompare( shadowMap, shadowCoord.xy + vec2( dx0, dy1 ), shadowCoord.z ) +
+			// 	texture2DCompare( shadowMap, shadowCoord.xy + vec2( 0.0, dy1 ), shadowCoord.z ) +
+			// 	texture2DCompare( shadowMap, shadowCoord.xy + vec2( dx1, dy1 ), shadowCoord.z )
+			// ) * ( 1.0 / 17.0 );
 
 		#elif defined( SHADOWMAP_TYPE_PCF_SOFT )
 
@@ -130,22 +162,22 @@ export default /* glsl */`
 				texture2DCompare( shadowMap, uv + vec2( dx, 0.0 ), shadowCoord.z ) +
 				texture2DCompare( shadowMap, uv + vec2( 0.0, dy ), shadowCoord.z ) +
 				texture2DCompare( shadowMap, uv + texelSize, shadowCoord.z ) +
-				mix( texture2DCompare( shadowMap, uv + vec2( -dx, 0.0 ), shadowCoord.z ), 
+				mix( texture2DCompare( shadowMap, uv + vec2( -dx, 0.0 ), shadowCoord.z ),
 					 texture2DCompare( shadowMap, uv + vec2( 2.0 * dx, 0.0 ), shadowCoord.z ),
 					 f.x ) +
-				mix( texture2DCompare( shadowMap, uv + vec2( -dx, dy ), shadowCoord.z ), 
+				mix( texture2DCompare( shadowMap, uv + vec2( -dx, dy ), shadowCoord.z ),
 					 texture2DCompare( shadowMap, uv + vec2( 2.0 * dx, dy ), shadowCoord.z ),
 					 f.x ) +
-				mix( texture2DCompare( shadowMap, uv + vec2( 0.0, -dy ), shadowCoord.z ), 
+				mix( texture2DCompare( shadowMap, uv + vec2( 0.0, -dy ), shadowCoord.z ),
 					 texture2DCompare( shadowMap, uv + vec2( 0.0, 2.0 * dy ), shadowCoord.z ),
 					 f.y ) +
-				mix( texture2DCompare( shadowMap, uv + vec2( dx, -dy ), shadowCoord.z ), 
+				mix( texture2DCompare( shadowMap, uv + vec2( dx, -dy ), shadowCoord.z ),
 					 texture2DCompare( shadowMap, uv + vec2( dx, 2.0 * dy ), shadowCoord.z ),
 					 f.y ) +
-				mix( mix( texture2DCompare( shadowMap, uv + vec2( -dx, -dy ), shadowCoord.z ), 
+				mix( mix( texture2DCompare( shadowMap, uv + vec2( -dx, -dy ), shadowCoord.z ),
 						  texture2DCompare( shadowMap, uv + vec2( 2.0 * dx, -dy ), shadowCoord.z ),
 						  f.x ),
-					 mix( texture2DCompare( shadowMap, uv + vec2( -dx, 2.0 * dy ), shadowCoord.z ), 
+					 mix( texture2DCompare( shadowMap, uv + vec2( -dx, 2.0 * dy ), shadowCoord.z ),
 						  texture2DCompare( shadowMap, uv + vec2( 2.0 * dx, 2.0 * dy ), shadowCoord.z ),
 						  f.x ),
 					 f.y )
